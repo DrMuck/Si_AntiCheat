@@ -12,6 +12,8 @@
  prefix does nothing. AlwaysOn in the config (or "!audit always on") keeps the cap and sender check running permanently.
 
    !audit <player> [minutes]   start an audit (default minutes from config)
+   !audit compare <player> [m] audit a trusted player in parallel: own column in every report (cross-check)
+   !audit minutes <n>          default audit length (saved)
    !audit stop <player>|all    end now and write the report
    !audit report [player|all]  write a report now, keep auditing
    !audit status               running audits, population size, cap mode
@@ -34,9 +36,9 @@ using UnityEngine;
 
 namespace Si_AntiCheat
 {
-    public class AntiCheatMod : MelonMod
+    public partial class AntiCheatMod : MelonMod
     {
-        public const string Version = "0.1.1";
+        public const string Version = "0.2.0";
         const string Tag = "<color=#FF9F5A>[AC]</color> ";
         internal static AntiCheatConfig Cfg = new AntiCheatConfig();
 
@@ -72,7 +74,7 @@ namespace Si_AntiCheat
             try
             {
                 HelperMethods.RegisterAdminCommand("audit", Command_Audit, Power.Kick,
-                    "Audit a player for cheating. Usage: !audit <player> [minutes] | !audit stop|report <player>|all | !audit status | !audit cap [off|log|clamp]");
+                    "Audit a player for cheating. Usage: !audit <player> [minutes] | !audit compare <player> | !audit stop|report <player>|all | !audit status | !audit minutes <n> | !audit cap [off|log|clamp] | !audit always [on|off]");
                 Event_Damage.OnPrePlayerDamageReceived += OnPreDamage;
                 if (Cfg.SenderCheck) SenderPatch.Apply(HarmonyInstance);
                 _registered = true;
@@ -370,6 +372,7 @@ namespace Si_AntiCheat
         static void Finish(AuditSession s, string reason)
         {
             Audit.Sessions.Remove(s.SteamId);
+            Audit.Archive(s, reason, Cfg);
             string? path = Audit.WriteReport(s, Cfg, reason);
             string summary = Audit.ChatSummary(s, Cfg);
             MelonLogger.Msg("[AC] audit finished (" + reason + "): " + summary);
@@ -445,9 +448,26 @@ namespace Si_AntiCheat
                         Cfg = AntiCheatConfig.Load();
                         Reply(caller, "config reloaded, cap mode " + Cfg.CapMode);
                         return;
+                    case "minutes":
+                    {
+                        if (tok.Count < 2 || !int.TryParse(tok[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)) { Reply(caller, "default minutes " + Cfg.DefaultAuditMinutes + " (max " + Cfg.MaxAuditMinutes + ")"); return; }
+                        Cfg.DefaultAuditMinutes = Math.Max(1, Math.Min(Cfg.MaxAuditMinutes, n));
+                        Cfg.Save();
+                        Reply(caller, "default minutes " + Cfg.DefaultAuditMinutes + " (saved)");
+                        return;
+                    }
                 }
-                // start: <player name words...> [minutes]
+                // start | compare: <player name words or steam id> [minutes]
+                bool reference = false;
+                if (sub == "start") tok.RemoveAt(0);
+                else if (sub == "compare" || sub == "ref" || sub == "reference") { reference = true; tok.RemoveAt(0); }
                 int minutes = Cfg.DefaultAuditMinutes;
+                if (reference)
+                {
+                    // a reference should outlast the suspects it is compared with
+                    double longest = Audit.Suspects.Select(a => a.MinutesLeft).DefaultIfEmpty(0).Max();
+                    minutes = Math.Max(minutes, (int)Math.Ceiling(longest));
+                }
                 if (tok.Count > 1 && int.TryParse(tok[tok.Count - 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int m))
                 {
                     minutes = Math.Max(1, Math.Min(Cfg.MaxAuditMinutes, m));
@@ -455,17 +475,18 @@ namespace Si_AntiCheat
                 }
                 string query = string.Join(" ", tok);
                 Player? target = FindPlayer(query, out string why);
-                if (target == null) { Reply(caller, why + ". Usage: !audit <player> [minutes]"); return; }
+                if (target == null) { Reply(caller, why + ". Usage: !audit <player> [minutes] | !audit compare <player> [minutes]"); return; }
                 ulong sid = target.PlayerID.m_ID;
                 if (Audit.Sessions.TryGetValue(sid, out AuditSession running))
                 {
-                    Reply(caller, target.PlayerName + " is already audited, " + running.MinutesLeft.ToString("0.0", CultureInfo.InvariantCulture) + " min left (" + running.S.Hits + " hits). !audit stop / report " + target.PlayerName);
+                    Reply(caller, target.PlayerName + " is already audited as " + running.Role + ", " + running.MinutesLeft.ToString("0.0", CultureInfo.InvariantCulture) + " min left (" + running.S.Hits + " hits). !audit stop / report " + target.PlayerName);
                     return;
                 }
                 if (Audit.Sessions.Count >= Cfg.MaxParallelAudits) { Reply(caller, "already " + Audit.Sessions.Count + " audits running (MaxParallelAudits)"); return; }
-                AuditSession s = Audit.Start(sid, target.PlayerName, minutes, caller);
-                MelonLogger.Msg("[AC] audit started on " + target.PlayerName + " (" + sid + ") for " + minutes + " min by " + s.StartedByName);
-                Reply(caller, "auditing " + target.PlayerName + " for " + minutes + " min (cap mode " + Cfg.CapMode + ", baseline " + (Cfg.PopulationBaseline ? "on" : "off") + "). Report to admins + file when done.");
+                AuditSession s = Audit.Start(sid, target.PlayerName, minutes, caller, reference);
+                MelonLogger.Msg("[AC] " + s.Role + " audit started on " + target.PlayerName + " (" + sid + ") for " + minutes + " min by " + s.StartedByName);
+                Reply(caller, (reference ? "reference " : "auditing ") + target.PlayerName + " for " + minutes + " min (cap mode " + Cfg.CapMode + ", baseline " + (Cfg.PopulationBaseline ? "on" : "off") +
+                              (reference ? "). Their numbers become a column in every report." : "). Report to admins + file when done."));
             }
             catch (Exception ex)
             {
@@ -476,7 +497,7 @@ namespace Si_AntiCheat
 
         static void Help(Player? caller)
         {
-            Reply(caller, "!audit <player> [minutes] | stop <player>|all | report [player|all] | status | cap [off|log|clamp] | always [on|off] | reload");
+            Reply(caller, "!audit <player> [minutes] | compare <player> [minutes] | stop <player>|all | report [player|all] | status | minutes <n> | cap [off|log|clamp] | always [on|off] | reload");
         }
 
         static void Status(Player? caller)
@@ -485,7 +506,7 @@ namespace Si_AntiCheat
                           ", profiles cached " + Profiles.CacheCount + ", audits " + Audit.Sessions.Count +
                           (Audit.Any ? ", baseline " + Audit.PopulationPlayers.Count + " players / " + Audit.Population.Hits + " hits" : ""));
             foreach (AuditSession s in Audit.Sessions.Values)
-                Reply(caller, "  " + s.Name + ": " + s.MinutesLeft.ToString("0.0", CultureInfo.InvariantCulture) + " min left, hits " + s.S.Hits + ", above cap " + s.S.Clamps +
+                Reply(caller, "  " + s.Name + " (" + s.Role + "): " + s.MinutesLeft.ToString("0.0", CultureInfo.InvariantCulture) + " min left, hits " + s.S.Hits + ", above cap " + s.S.Clamps +
                               ", dmg max x" + s.S.Damage.Max.ToString("0.00", CultureInfo.InvariantCulture) + ", range max x" + s.S.Range.Max.ToString("0.00", CultureInfo.InvariantCulture) +
                               ", speed max x" + s.S.Speed.Max.ToString("0.00", CultureInfo.InvariantCulture) + ", mismatches " + s.S.SenderMismatch);
         }
@@ -498,7 +519,7 @@ namespace Si_AntiCheat
             if (query.Length == 0 || query.Equals("all", StringComparison.OrdinalIgnoreCase)) targets = Audit.Sessions.Values.ToList();
             else
             {
-                targets = Audit.Sessions.Values.Where(s => s.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+                targets = Audit.Sessions.Values.Where(s => s.SteamId.ToString() == query || s.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
                 if (targets.Count == 0) { Reply(caller, "no audit matches '" + query + "'"); return; }
             }
             foreach (AuditSession s in targets)
