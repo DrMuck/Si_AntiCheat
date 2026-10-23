@@ -8,6 +8,9 @@
  owns the unit it names. Everyone else is collected as a population baseline over the same window, so lag and map
  effects cancel out in the report.
 
+ Idle by default: until an admin starts an audit the hit handler returns after one boolean check and the sender
+ prefix does nothing. AlwaysOn in the config (or "!audit always on") keeps the cap and sender check running permanently.
+
    !audit <player> [minutes]   start an audit (default minutes from config)
    !audit stop <player>|all    end now and write the report
    !audit report [player|all]  write a report now, keep auditing
@@ -33,9 +36,12 @@ namespace Si_AntiCheat
 {
     public class AntiCheatMod : MelonMod
     {
-        public const string Version = "0.1.0";
+        public const string Version = "0.1.1";
         const string Tag = "<color=#FF9F5A>[AC]</color> ";
         internal static AntiCheatConfig Cfg = new AntiCheatConfig();
+
+        /// <summary>Everything per hit runs only while armed: AlwaysOn in the config, or at least one audit running.</summary>
+        public static bool Armed => Cfg.Enabled && (Cfg.AlwaysOn || Audit.Any);
 
         static bool _registered;
 
@@ -146,7 +152,7 @@ namespace Si_AntiCheat
 
         static void OnPreDamage(object? sender, OnPreDamageReceivedArgs args)
         {
-            if (!Cfg.Enabled || args == null) return;
+            if (!Armed || args == null) return;
             try
             {
                 DamageManager victim = args.DamageManager;
@@ -425,6 +431,16 @@ namespace Si_AntiCheat
                     case "stop": StopOrReport(caller, tok.Skip(1).ToList(), stop: true); return;
                     case "report": StopOrReport(caller, tok.Skip(1).ToList(), stop: false); return;
                     case "cap": CapMode(caller, tok.Count > 1 ? tok[1] : ""); return;
+                    case "always":
+                    {
+                        string v = tok.Count > 1 ? tok[1].ToLowerInvariant() : "";
+                        if (v != "on" && v != "off") { Reply(caller, "always " + (Cfg.AlwaysOn ? "on" : "off") + " (on = cap + sender check run on every hit without an audit)"); return; }
+                        Cfg.AlwaysOn = v == "on";
+                        Cfg.Save();
+                        MelonLogger.Msg("[AC] always-on set to " + v + " by " + (caller != null ? caller.PlayerName : "console"));
+                        Reply(caller, "always " + v + " (saved)");
+                        return;
+                    }
                     case "reload":
                         Cfg = AntiCheatConfig.Load();
                         Reply(caller, "config reloaded, cap mode " + Cfg.CapMode);
@@ -460,12 +476,12 @@ namespace Si_AntiCheat
 
         static void Help(Player? caller)
         {
-            Reply(caller, "!audit <player> [minutes] | stop <player>|all | report [player|all] | status | cap [off|log|clamp] | reload");
+            Reply(caller, "!audit <player> [minutes] | stop <player>|all | report [player|all] | status | cap [off|log|clamp] | always [on|off] | reload");
         }
 
         static void Status(Player? caller)
         {
-            Reply(caller, "cap mode " + Cfg.CapMode + " (tol " + Cfg.CapTolerance.ToString("0.00", CultureInfo.InvariantCulture) + "), sender check " + (SenderPatch.Applied ? "on" : "off") +
+            Reply(caller, (Armed ? "armed" : "idle") + ", always " + (Cfg.AlwaysOn ? "on" : "off") + ", cap mode " + Cfg.CapMode + " (tol " + Cfg.CapTolerance.ToString("0.00", CultureInfo.InvariantCulture) + "), sender check " + (SenderPatch.Applied ? "on" : "off") +
                           ", profiles cached " + Profiles.CacheCount + ", audits " + Audit.Sessions.Count +
                           (Audit.Any ? ", baseline " + Audit.PopulationPlayers.Count + " players / " + Audit.Population.Hits + " hits" : ""));
             foreach (AuditSession s in Audit.Sessions.Values)

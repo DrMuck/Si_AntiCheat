@@ -16,7 +16,11 @@ positions, top speeds and fire rates. This mod compares what clients claim again
 
 ## What it does
 
-**Always on (cheap, one lookup and a float compare per hit):**
+**Idle by default.** Until an admin starts an audit, the hit handler returns after one boolean check and the sender
+prefix does nothing. The checks below run only while an audit is active, or permanently with `AlwaysOn: true`
+(`!audit always on`).
+
+**While armed (cheap, one lookup and a float compare per hit):**
 
 - **Damage cap.** For every client-reported hit, the largest hit the shooter's unit can deal is computed from the
   server's live data: max over its weapons of impact/ricochet, penetration or splash damage (each is its own packet),
@@ -62,7 +66,8 @@ damage to the victim's health before this mod sees it, so a 9999 claim on a 1000
 | `!audit stop <player>\|all` | End now, write the report, summary to admins. |
 | `!audit report [player\|all]` | Write an interim report, keep auditing. |
 | `!audit status` | Running audits with live counters, baseline size, cap mode. |
-| `!audit cap [off\|log\|clamp]` | Show or set the always-on cap mode (saved to the config). |
+| `!audit cap [off\|log\|clamp]` | Show or set what happens to hits above the cap (saved to the config). |
+| `!audit always [on\|off]` | Show or set whether cap and sender check run without an audit (saved). Default off. |
 | `!audit reload` | Re-read the config. |
 
 ## Config
@@ -71,7 +76,8 @@ damage to the victim's health before this mod sees it, so a 9999 claim on a 1000
 
 | Key | Default | Meaning |
 |---|---|---|
-| `CapMode` | `log` | `off`, `log` (count + notify) or `clamp` (also cut the damage). Start with `log` for a few days, read the reports, then switch. |
+| `AlwaysOn` | false | true = cap and sender check run on every hit without an audit. |
+| `CapMode` | `log` | `off`, `log` (count + notify) or `clamp` (also cut the damage). Start with `log`, read the reports, then switch. |
 | `CapTolerance` | 1.25 | Multiplier on the computed maximum before a hit counts as over the cap. |
 | `CapNegativeDamage` | false | In `clamp` mode also clamp healing packets to the unit's repair maximum. |
 | `NotifyAdmins`, `NotifyCooldownSeconds`, `LogClamps` | true, 60, true | Over-cap aggregation per player. |
@@ -100,7 +106,7 @@ which is fine because the cap is an upper bound.
 
 ## Status
 
-0.1.0 (2026-10-23): built for both branches, reference check OK against the live server and 0.9.47, **not yet run in
-a live round**. First thing to check in the log after a round: `[AC]` lines with "no weapon profile" (units whose
+0.1.1 (2026-10-23): built for both branches, reference check OK against the live server and 0.9.47, **not yet run in
+a live round**. 0.1.1 made the mod idle unless an audit runs (`AlwaysOn` switch). First thing to check in the log after a round: `[AC]` lines with "no weapon profile" (units whose
 weapons the profile walk misses) and over-cap lines for players who are obviously not cheating (then raise
 `CapTolerance` or fix the profile) before switching `CapMode` to `clamp`.

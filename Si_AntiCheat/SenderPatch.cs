@@ -40,6 +40,7 @@ namespace Si_AntiCheat
 
         static void Prefix(NetworkID remoteID, bool isServer)
         {
+            if (!AntiCheatMod.Armed) return;
             Current = remoteID;
             HaveSender = isServer;
         }

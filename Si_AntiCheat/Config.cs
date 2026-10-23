@@ -13,7 +13,11 @@ namespace Si_AntiCheat
     {
         public bool Enabled = true;
 
-        // ---- always-on damage cap (every client-reported hit, no audit needed) ----
+        // false (default): the mod is idle until an admin starts an audit (one boolean check per hit, nothing else).
+        // true: the damage cap and sender check below run on every hit all the time.
+        public bool AlwaysOn = false;
+
+        // ---- damage cap (every client-reported hit while armed: AlwaysOn or an audit running) ----
         // "off"   = do nothing
         // "log"   = compute the cap, log hits above it, never change the damage   (start here, measure for a few days)
         // "clamp" = also replace the reported damage by the cap
