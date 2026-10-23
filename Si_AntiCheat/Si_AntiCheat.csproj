@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <!-- Silica branch to build against: "test" (Steam test branch, the default here) or "default" (Steam default
+         branch, what the public server runs). Reference DLLs live in include\<branch>\ (copied from that branch's
+         server install, see Projects\_silica_refs). The default build goes to bin\Release\default\ so it can never
+         be mistaken for the test build:  dotnet build -c Release -p:SilicaBranch=default -->
+    <SilicaBranch Condition="'$(SilicaBranch)' == ''">test</SilicaBranch>
+    <OutputPath Condition="'$(SilicaBranch)' == 'default'">bin\$(Configuration)\default\</OutputPath>
+    <IntermediateOutputPath Condition="'$(SilicaBranch)' == 'default'">obj\$(Configuration)\default\</IntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath Condition="'$(SilicaBranch)' == 'default'">false</AppendTargetFrameworkToOutputPath>
+    <Nullable>enable</Nullable>
+    <MSBuildWarningsAsMessages>MSB3270</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="..\include\$(SilicaBranch)\*.dll">
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
