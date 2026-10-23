@@ -119,6 +119,18 @@ damage packet handler with a writable damage value), the command goes through `H
 No other mod is touched; Si_FriendlyFireLimits and this mod both adjust the same event value in subscription order,
 which is fine because the cap is an upper bound.
 
+## What the first test run taught (0.2.1)
+
+- A suicide arrives as a client damage packet with the player's own unit as instigator and showed up as a hit above
+  the cap. Self-damage (same object as shooter and victim) is now counted separately and neither capped nor rated.
+- A soldier on foot registered 25 m/s for two samples: momentum in the air (knockback, fall, jump). Speed samples are
+  skipped while a soldier is falling, jumping or climbing, and for `SpeedSettleSeconds` after the player's unit changed
+  (bailing out of a vehicle keeps its speed).
+- `!audit profile <player>` prints the weapon entries, reach, shot rate, top speed and weak-spot multiplier behind the
+  cap for the unit the player controls right now.
+- The shared ModUI document no longer carries live counters (every change was a frame push to all admins); it changes
+  once a minute during an audit. Live numbers are in the admin's per-player tables (Refresh tables).
+
 ## Status
 
 0.2.0 (2026-10-23): built for both branches, reference check OK against the live server and 0.9.47. 0.1.1 ran on the
