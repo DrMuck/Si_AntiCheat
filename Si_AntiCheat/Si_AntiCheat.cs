@@ -38,7 +38,7 @@ namespace Si_AntiCheat
 {
     public partial class AntiCheatMod : MelonMod
     {
-        public const string Version = "0.2.1";
+        public const string Version = "0.2.2";
         const string Tag = "<color=#FF9F5A>[AC]</color> ";
         internal static AntiCheatConfig Cfg = new AntiCheatConfig();
 

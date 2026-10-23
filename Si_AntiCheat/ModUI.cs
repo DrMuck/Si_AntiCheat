@@ -27,7 +27,7 @@ namespace Si_AntiCheat
                 var key = new System.Text.StringBuilder();
                 key.Append(Cfg.Enabled).Append('|').Append(Cfg.AlwaysOn).Append('|').Append(Cfg.CapMode).Append('|').Append(Cfg.DefaultAuditMinutes).Append('|').Append(Armed);
                 foreach (AuditSession s in Audit.Sessions.Values)
-                    key.Append('|').Append(s.SteamId).Append(s.IsReference).Append((int)Math.Ceiling(s.MinutesLeft));
+                    key.Append('|').Append(s.SteamId).Append(s.IsReference).Append(s.End.Ticks);
                 string k = key.ToString();
                 if (_uiCache != null && k == _uiKey) return _uiCache;
 
@@ -39,7 +39,7 @@ namespace Si_AntiCheat
                         : "Idle: nothing runs until you start an audit")
                     .Info("Hits above cap: " + Cfg.CapMode.ToUpperInvariant() + " | checks without audit: " + (Cfg.AlwaysOn ? "ON" : "OFF") + " | default " + Cfg.DefaultAuditMinutes + " min | reports: UserData/cfg/AntiCheat/reports");
                 foreach (AuditSession s in Audit.Sessions.Values.OrderBy(a => a.IsReference).ThenBy(a => a.Name))
-                    x.Info(s.Name + " (" + s.Role + "): " + Math.Ceiling(s.MinutesLeft).ToString("0", CultureInfo.InvariantCulture) + " min left");
+                    x.Info(s.Name + " (" + s.Role + "): started " + s.Start.ToString("HH:mm") + ", ends " + s.End.ToString("HH:mm"));
                 x.Picker("!audit", "Audit a player", "Pick the suspect, then type the minutes or take DEFAULT (" + Cfg.DefaultAuditMinutes + " min). Every other player on the server is collected as the baseline over the same window.", admin: true, arg: "player,text?")
                  .Picker("!audit compare", "Add reference player", "Audits a player you trust in parallel: their numbers become an extra column in every report for a direct cross-check (same window, same lag).", admin: true, arg: "player,text?")
                  .Value("!audit minutes", "Default minutes", "Audit length used when no minutes are typed (saved).", admin: true, current: Cfg.DefaultAuditMinutes)
