@@ -79,6 +79,10 @@ namespace Si_AntiCheat
         public readonly Metric Range = new Metric();
         public readonly Metric Rate = new Metric();
         public readonly Metric Speed = new Metric();
+        public readonly Metric Magazine = new Metric();   // shots since last reload / magazine size, sampled at every FIRE off and reload
+        public int MagazineOver;        // reload cycles with more shots than the magazine holds
+        public int HitsOverMagazine;    // reload cycles with more hit packets than the magazine can produce (soldiers)
+        public int HitsNotFiring;       // hit packets from a soldier whose weapon has not fired for longer than a bullet lives
         public int Hits;
         public int Clamps;              // hits above the cap (clamped in "clamp" mode, only counted in "log" mode)
         public float ClampedDamage;     // damage removed by the cap (clamp mode) or that would have been removed (log mode)
@@ -229,6 +233,12 @@ namespace Si_AntiCheat
             if (MetricFlagged(a.Range, p.Range, cfg.RangeFlag, out w)) { hard++; reasons.Add("range: " + w); }
             if (MetricFlagged(a.Rate, p.Rate, cfg.RateFlag, out w)) { soft++; reasons.Add("hit rate: " + w); }
             if (MetricFlagged(a.Speed, p.Speed, cfg.SpeedFlag, out w)) { soft++; reasons.Add("speed: " + w); }
+            // the magazine signals are client-mod signatures: a bigger magazine, a faster fire rate or hits from a silent weapon
+            if (MetricFlagged(a.Magazine, p.Magazine, cfg.MagazineFlag, out w)) { hard++; reasons.Add("magazine: " + w); }
+            if (a.HitsOverMagazine >= 2) { hard++; reasons.Add("too many hits per magazine: " + a.HitsOverMagazine + " reload cycles"); }
+            else if (a.HitsOverMagazine == 1) { soft++; reasons.Add("too many hits per magazine: 1 reload cycle"); }
+            if (a.HitsNotFiring >= 3) { hard++; reasons.Add("hits while not firing: " + a.HitsNotFiring); }
+            else if (a.HitsNotFiring > 0) { soft++; reasons.Add("hits while not firing: " + a.HitsNotFiring); }
             // one or two can be an ownership hand-over in flight (vehicle enter/exit); three or more is not
             if (a.SenderMismatch >= 3) { hard++; reasons.Add("sender mismatch: " + a.SenderMismatch + " packets named a unit the sender does not own"); }
             else if (a.SenderMismatch > 0) { soft++; reasons.Add("sender mismatch: " + a.SenderMismatch + " packet(s), could be an ownership hand-over"); }
@@ -261,10 +271,13 @@ namespace Si_AntiCheat
             b.AppendLine("  distance / range    " + Pad(a.Range.Line()) + " | " + p.Range.Line());
             b.AppendLine("  hits/s / max rate   " + Pad(a.Rate.Line()) + " | " + p.Rate.Line());
             b.AppendLine("  speed / top speed   " + Pad(a.Speed.Line()) + " | " + p.Speed.Line());
+            b.AppendLine("  shots / magazine    " + Pad(a.Magazine.Line()) + " | " + p.Magazine.Line());
             b.AppendLine();
             b.AppendLine("Counts: hits " + a.Hits + ", above cap " + a.Clamps + " (" + (cfg.Clamp ? "clamped" : "logged only") + ", " + a.ClampedDamage.ToString("0", CultureInfo.InvariantCulture) + " damage), " +
                          "sender mismatches " + a.SenderMismatch + ", healing over max " + a.NegativeOver + ", unknown instigator " + a.Unknown + ", self-damage " + a.Self + ", speed samples " + a.SpeedSamples);
-            b.AppendLine("        population: hits " + p.Hits + ", above cap " + p.Clamps + ", sender mismatches " + p.SenderMismatch + ", healing over max " + p.NegativeOver + ", unknown " + p.Unknown + ", speed samples " + p.SpeedSamples);
+            b.AppendLine("        magazine: cycles over magazine " + a.MagazineOver + ", cycles with too many hits " + a.HitsOverMagazine + ", hits while not firing " + a.HitsNotFiring);
+            b.AppendLine("        population: hits " + p.Hits + ", above cap " + p.Clamps + ", sender mismatches " + p.SenderMismatch + ", healing over max " + p.NegativeOver + ", unknown " + p.Unknown + ", speed samples " + p.SpeedSamples +
+                         ", over magazine " + p.MagazineOver + ", too many hits " + p.HitsOverMagazine + ", hits while not firing " + p.HitsNotFiring);
             if (refs.Count > 0)
             {
                 b.AppendLine();
@@ -276,6 +289,7 @@ namespace Si_AntiCheat
                     b.AppendLine("    distance / range    " + r.S.Range.Line());
                     b.AppendLine("    hits/s / max rate   " + r.S.Rate.Line());
                     b.AppendLine("    speed / top speed   " + r.S.Speed.Line());
+                    b.AppendLine("    shots / magazine    " + r.S.Magazine.Line());
                 }
             }
             b.AppendLine();
@@ -314,7 +328,9 @@ namespace Si_AntiCheat
             rows.Add(Row("distance / range", s, refs, st => st.Range.Cell()));
             rows.Add(Row("hits/s / max rate", s, refs, st => st.Rate.Cell()));
             rows.Add(Row("speed / top speed", s, refs, st => st.Speed.Cell()));
+            rows.Add(Row("shots / magazine", s, refs, st => st.Magazine.Cell()));
             rows.Add(Row("hits / above cap", s, refs, st => st.Hits + " / " + st.Clamps));
+            rows.Add(Row("mag over / hits over / idle hits", s, refs, st => st.MagazineOver + " / " + st.HitsOverMagazine + " / " + st.HitsNotFiring));
             rows.Add(Row("mismatch / heal>max", s, refs, st => st.SenderMismatch + " / " + st.NegativeOver));
             rows.Add(Row("self-dmg / speed n", s, refs, st => st.Self + " / " + st.SpeedSamples));
             int i = 0;

@@ -38,6 +38,16 @@ prefix does nothing. The checks below run only while an audit is active, or perm
 - hits in the last second / the unit's maximum shots per second
 - horizontal speed / the unit's `TopSpeed`, sampled every `SpeedSampleInterval` (boarded passengers skipped)
 - healing packets beyond the unit's repair maximum, sender mismatches
+- **shots per magazine** (0.3.0): the client sends a FIRE RPC (bool) at every trigger change and a SYNCHRELOAD RPC at
+  reload start and end, for soldiers and for vehicle turrets (primary / secondary). Firing time between on and off
+  divided by the weapon's fire delay gives the shots; summed since the last reload and divided by the magazine size
+  (live data, UnitBalance included) it must stay near 1.0. A bigger magazine, a faster fire rate or a removed reload
+  push it above. For soldiers two hit-based counters cross-check it: more hit packets per reload cycle than the magazine
+  can produce, and hits from a weapon that has not fired for longer than its bullet lives (catches a client that stops
+  sending FIRE). The booleans are peeked from the packet in a Harmony prefix with the stream position restored, because
+  the server copy's own reload state can refuse a remote reload. Splash weapons are excluded from the hit counters; a
+  weapon change resets the cycle; a FIRE on while a burst is open drops the stale burst, and one burst can never count
+  more than 1.5 magazines, so a late packet cannot fake a whole magazine.
 
 Every other player on the server is collected as the **population baseline** over the same window, so lag spikes,
 server load and map effects show up on both sides of the comparison. Several players can be audited in parallel
@@ -52,8 +62,9 @@ counts (hits above cap, mismatches, healing over max), a per-unit table and the 
 out-of-reach hits, speed spikes).
 
 Verdict rules (stated in the report): a metric stands out when its flagged share is at least 2 % and four times the
-population's, or its p95 exceeds the flag threshold and 1.5x the population's p95. Damage or range standing out, three
-or more sender mismatches, or two soft metrics (rate, speed, healing) give **SUSPICIOUS**; one soft metric gives
+population's, or its p95 exceeds the flag threshold and 1.5x the population's p95. Damage, range or magazine standing
+out, three or more sender mismatches, two reload cycles with too many hits, three hits while not firing, or two soft
+metrics (rate, speed, healing, single magazine counters) give **SUSPICIOUS**; one soft metric gives
 **WATCH**; fewer than 30 hits and 100 speed samples give **INCONCLUSIVE**. Note that vanilla clamps the reported
 damage to the victim's health before this mod sees it, so a 9999 claim on a 1000-HP unit shows as ratio
 1000 / cap, not 9999 / cap.
@@ -97,7 +108,7 @@ once a minute or right after one of your commands, so **Refresh tables** (= `!au
 | `CapNegativeDamage` | false | In `clamp` mode also clamp healing packets to the unit's repair maximum. |
 | `NotifyAdmins`, `NotifyCooldownSeconds`, `LogClamps` | true, 60, true | Over-cap aggregation per player. |
 | `SenderCheck` | true | Harmony prefix on `NetworkLayer.ProcessMessage`. |
-| `DamageFlag`, `RangeFlag`, `RateFlag`, `SpeedFlag` | 1.0, 1.2, 1.5, 1.15 | Ratio above which a sample is "flagged" in the audit metrics. |
+| `DamageFlag`, `RangeFlag`, `RateFlag`, `SpeedFlag`, `MagazineFlag` | 1.0, 1.2, 1.5, 1.15, 1.1 | Ratio above which a sample is "flagged" in the audit metrics. |
 | `RangeMargin` | 30 | Metres added to the weapon reach (victim size, movement during flight). |
 | `SpeedSampleInterval` | 0.25 | Seconds between position samples during audits. |
 | `DefaultAuditMinutes`, `MaxAuditMinutes`, `MaxParallelAudits` | 10, 120, 8 | Audit windows. |

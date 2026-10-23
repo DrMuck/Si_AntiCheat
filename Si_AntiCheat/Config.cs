@@ -37,6 +37,7 @@ namespace Si_AntiCheat
         public float RangeFlag = 1.2f;          // distance / (max range + splash radius + margin)
         public float RateFlag = 1.5f;           // hits in the last second / max shots per second of the unit
         public float SpeedFlag = 1.15f;         // horizontal speed / TopSpeed of the unit
+        public float MagazineFlag = 1.1f;       // shots since the last reload / magazine size (fire time ÷ fire delay, from the FIRE/RELOAD RPCs)
         public float SpeedSampleInterval = 0.25f;
         public float SpeedSettleSeconds = 3f;   // no speed samples this long after the player's unit changed (bailing out of a vehicle keeps its momentum)
 
@@ -101,6 +102,7 @@ namespace Si_AntiCheat
             if (RangeFlag < 1f) RangeFlag = 1f;
             if (RateFlag < 1f) RateFlag = 1f;
             if (SpeedFlag < 1f) SpeedFlag = 1f;
+            if (MagazineFlag < 1f) MagazineFlag = 1f;
             if (SpeedSampleInterval < 0.1f) SpeedSampleInterval = 0.1f;
             if (SpeedSampleInterval > 2f) SpeedSampleInterval = 2f;
             if (SpeedSettleSeconds < 0f) SpeedSettleSeconds = 0f;

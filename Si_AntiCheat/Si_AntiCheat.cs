@@ -38,7 +38,7 @@ namespace Si_AntiCheat
 {
     public partial class AntiCheatMod : MelonMod
     {
-        public const string Version = "0.2.2";
+        public const string Version = "0.3.0";
         const string Tag = "<color=#FF9F5A>[AC]</color> ";
         internal static AntiCheatConfig Cfg = new AntiCheatConfig();
 
@@ -77,6 +77,7 @@ namespace Si_AntiCheat
                     "Audit a player for cheating. Usage: !audit <player> [minutes] | !audit compare <player> | !audit stop|report <player>|all | !audit status | !audit minutes <n> | !audit cap [off|log|clamp] | !audit always [on|off]");
                 Event_Damage.OnPrePlayerDamageReceived += OnPreDamage;
                 if (Cfg.SenderCheck) SenderPatch.Apply(HarmonyInstance);
+                MagazineCheck.Apply(HarmonyInstance);
                 _registered = true;
                 MelonLogger.Msg("[AC] Si_AntiCheat v" + Version + " loaded, cap mode " + Cfg.CapMode + ", !audit registered");
             }
@@ -94,6 +95,7 @@ namespace Si_AntiCheat
         static void OnGameStarted(GameMode mode)
         {
             Profiles.Clear();
+            MagazineCheck.Clear();
             _hitTimes.Clear();
             _speed.Clear();
         }
@@ -266,8 +268,18 @@ namespace Si_AntiCheat
                     float hps = HitsLastSecond(sid, now);
                     st.Rate.Add(hps / Mathf.Max(prof.ShotsPerSec, 0.1f), Cfg.RateFlag);
                 }
+
+                // 6. soldiers: hit packets per magazine and hits from a weapon that is not firing
+                if (MagazineCheck.Applied && shooterObj is Soldier soldier) MagazineCheck.OnSoldierHit(soldier, st, now);
             }
             catch (Exception ex) { ErrorThrottled("damage handler", ex); }
+        }
+
+        /// <summary>Steam id of the client that owns this object, 0 for server-owned (AI) objects.</summary>
+        public static ulong OwnerId(BaseGameObject? bgo)
+        {
+            Player? p = Attribute(bgo);
+            return p != null ? p.PlayerID.m_ID : 0;
         }
 
         static Player? Attribute(BaseGameObject? bgo)
@@ -526,7 +538,7 @@ namespace Si_AntiCheat
 
         static void Status(Player? caller)
         {
-            Reply(caller, (Armed ? "armed" : "idle") + ", always " + (Cfg.AlwaysOn ? "on" : "off") + ", cap mode " + Cfg.CapMode + " (tol " + Cfg.CapTolerance.ToString("0.00", CultureInfo.InvariantCulture) + "), sender check " + (SenderPatch.Applied ? "on" : "off") +
+            Reply(caller, (Armed ? "armed" : "idle") + ", always " + (Cfg.AlwaysOn ? "on" : "off") + ", cap mode " + Cfg.CapMode + " (tol " + Cfg.CapTolerance.ToString("0.00", CultureInfo.InvariantCulture) + "), sender check " + (SenderPatch.Applied ? "on" : "off") + ", magazine check " + (MagazineCheck.Applied ? "on (" + MagazineCheck.Tracked + " weapons)" : "off") +
                           ", profiles cached " + Profiles.CacheCount + ", audits " + Audit.Sessions.Count +
                           (Audit.Any ? ", baseline " + Audit.PopulationPlayers.Count + " players / " + Audit.Population.Hits + " hits" : ""));
             foreach (AuditSession s in Audit.Sessions.Values)
