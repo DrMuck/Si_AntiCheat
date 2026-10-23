@@ -85,6 +85,7 @@ namespace Si_AntiCheat
         public int SenderMismatch;
         public int NegativeOver;        // healing packets beyond the unit's repair maximum
         public int Unknown;             // hits whose instigator had no weapon profile
+        public int Self;                // self-damage packets (suicide, fall, own splash): not capped, not rated
         public int SpeedSamples;
         public readonly Dictionary<string, UnitRow> ByUnit = new Dictionary<string, UnitRow>();
         public readonly List<string> Notes = new List<string>();
@@ -262,7 +263,7 @@ namespace Si_AntiCheat
             b.AppendLine("  speed / top speed   " + Pad(a.Speed.Line()) + " | " + p.Speed.Line());
             b.AppendLine();
             b.AppendLine("Counts: hits " + a.Hits + ", above cap " + a.Clamps + " (" + (cfg.Clamp ? "clamped" : "logged only") + ", " + a.ClampedDamage.ToString("0", CultureInfo.InvariantCulture) + " damage), " +
-                         "sender mismatches " + a.SenderMismatch + ", healing over max " + a.NegativeOver + ", unknown instigator " + a.Unknown + ", speed samples " + a.SpeedSamples);
+                         "sender mismatches " + a.SenderMismatch + ", healing over max " + a.NegativeOver + ", unknown instigator " + a.Unknown + ", self-damage " + a.Self + ", speed samples " + a.SpeedSamples);
             b.AppendLine("        population: hits " + p.Hits + ", above cap " + p.Clamps + ", sender mismatches " + p.SenderMismatch + ", healing over max " + p.NegativeOver + ", unknown " + p.Unknown + ", speed samples " + p.SpeedSamples);
             if (refs.Count > 0)
             {
@@ -315,6 +316,7 @@ namespace Si_AntiCheat
             rows.Add(Row("speed / top speed", s, refs, st => st.Speed.Cell()));
             rows.Add(Row("hits / above cap", s, refs, st => st.Hits + " / " + st.Clamps));
             rows.Add(Row("mismatch / heal>max", s, refs, st => st.SenderMismatch + " / " + st.NegativeOver));
+            rows.Add(Row("self-dmg / speed n", s, refs, st => st.Self + " / " + st.SpeedSamples));
             int i = 0;
             foreach (string reason in reasons.Take(3))
             {

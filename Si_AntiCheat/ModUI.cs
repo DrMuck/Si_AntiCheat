@@ -21,13 +21,13 @@ namespace Si_AntiCheat
         {
             try
             {
-                // Runs every few seconds; the server only pushes a diff when the document changes, so coarse counters.
+                // Runs every few seconds and every change is a frame push to every admin, so the shared document carries
+                // no live counters: only who is audited and the whole minutes left (one diff per minute during an audit).
+                // Live numbers live in the per-player tables, which the ModUI server refreshes once a minute or on a command.
                 var key = new System.Text.StringBuilder();
                 key.Append(Cfg.Enabled).Append('|').Append(Cfg.AlwaysOn).Append('|').Append(Cfg.CapMode).Append('|').Append(Cfg.DefaultAuditMinutes).Append('|').Append(Armed);
                 foreach (AuditSession s in Audit.Sessions.Values)
-                    key.Append('|').Append(s.SteamId).Append(s.IsReference).Append((int)Math.Ceiling(s.MinutesLeft)).Append(':').Append(s.S.Hits / 10).Append(':').Append(s.S.Clamps).Append(':').Append(s.S.SenderMismatch)
-                       .Append(':').Append(F(s.S.Damage.Max)).Append(':').Append(F(s.S.Range.Max)).Append(':').Append(F(s.S.Speed.Max));
-                if (Audit.Any) key.Append("|pop").Append(Audit.PopulationPlayers.Count).Append(':').Append(Audit.Population.Hits / 50);
+                    key.Append('|').Append(s.SteamId).Append(s.IsReference).Append((int)Math.Ceiling(s.MinutesLeft));
                 string k = key.ToString();
                 if (_uiCache != null && k == _uiKey) return _uiCache;
 
@@ -35,16 +35,16 @@ namespace Si_AntiCheat
                 var x = ModUI.ModUIExport.New()
                     .Enabled(Cfg.Enabled)
                     .Info(Armed
-                        ? "ARMED: " + suspects + " suspect" + (suspects == 1 ? "" : "s") + ", " + refs + " reference" + (refs == 1 ? "" : "s") + ", baseline " + Audit.PopulationPlayers.Count + " players / " + Audit.Population.Hits + " hits"
+                        ? "ARMED: " + suspects + " suspect" + (suspects == 1 ? "" : "s") + ", " + refs + " reference" + (refs == 1 ? "" : "s") + " under audit; live numbers in the tables (Refresh tables)"
                         : "Idle: nothing runs until you start an audit")
                     .Info("Hits above cap: " + Cfg.CapMode.ToUpperInvariant() + " | checks without audit: " + (Cfg.AlwaysOn ? "ON" : "OFF") + " | default " + Cfg.DefaultAuditMinutes + " min | reports: UserData/cfg/AntiCheat/reports");
                 foreach (AuditSession s in Audit.Sessions.Values.OrderBy(a => a.IsReference).ThenBy(a => a.Name))
-                    x.Info(s.Name + " (" + s.Role + "): " + s.MinutesLeft.ToString("0", CultureInfo.InvariantCulture) + " min left, hits " + s.S.Hits + ", above cap " + s.S.Clamps +
-                           ", dmg max x" + F(s.S.Damage.Max) + ", range max x" + F(s.S.Range.Max) + ", speed max x" + F(s.S.Speed.Max) + ", mismatches " + s.S.SenderMismatch);
+                    x.Info(s.Name + " (" + s.Role + "): " + Math.Ceiling(s.MinutesLeft).ToString("0", CultureInfo.InvariantCulture) + " min left");
                 x.Picker("!audit", "Audit a player", "Pick the suspect, then type the minutes or take DEFAULT (" + Cfg.DefaultAuditMinutes + " min). Every other player on the server is collected as the baseline over the same window.", admin: true, arg: "player,text?")
                  .Picker("!audit compare", "Add reference player", "Audits a player you trust in parallel: their numbers become an extra column in every report for a direct cross-check (same window, same lag).", admin: true, arg: "player,text?")
                  .Value("!audit minutes", "Default minutes", "Audit length used when no minutes are typed (saved).", admin: true, current: Cfg.DefaultAuditMinutes)
-                 .Action("!audit status", "Refresh tables", "Refreshes the report tables on this page and prints the running audits.", admin: true);
+                 .Action("!audit status", "Refresh tables", "Refreshes the report tables on this page and prints the running audits.", admin: true)
+                 .Picker("!audit profile", "Show unit profile", "Prints what the cap is built from for the unit that player controls right now: weapons, max hit, reach, shot rate, top speed, weak-spot multiplier.", admin: true, arg: "player");
                 if (Audit.Any)
                 {
                     var choices = new List<(string, string)> { ("all", "ALL") };

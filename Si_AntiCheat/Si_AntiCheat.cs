@@ -38,7 +38,7 @@ namespace Si_AntiCheat
 {
     public partial class AntiCheatMod : MelonMod
     {
-        public const string Version = "0.2.0";
+        public const string Version = "0.2.1";
         const string Tag = "<color=#FF9F5A>[AC]</color> ";
         internal static AntiCheatConfig Cfg = new AntiCheatConfig();
 
@@ -56,7 +56,7 @@ namespace Si_AntiCheat
         static readonly Dictionary<ulong, float> _mismatchLog = new Dictionary<ulong, float>();
 
         // movement sampling (audits only)
-        class SpeedTrack { public Unit? Unit; public Vector3 Pos; public float T; }
+        class SpeedTrack { public Unit? Unit; public Vector3 Pos; public float T; public float ChangedAt; }
         static readonly Dictionary<ulong, SpeedTrack> _speed = new Dictionary<ulong, SpeedTrack>();
         static float _nextSpeedSample;
         static float _lastError;
@@ -188,6 +188,13 @@ namespace Si_AntiCheat
                 if (shooterObj == null)
                 {
                     if (st != null) st.Unknown++;
+                    return;
+                }
+                // self-damage (suicide, fall, own splash) travels the same way with the player's own unit as instigator:
+                // it can only hurt the sender, so it is neither capped nor rated
+                if (victim.Owner != null && ReferenceEquals(shooterObj, victim.Owner))
+                {
+                    if (st != null) { st.Self++; st.Hits++; }
                     return;
                 }
                 UnitProfile? prof = Profiles.For(shooterObj);
@@ -345,11 +352,15 @@ namespace Si_AntiCheat
                 Vector3 pos = u.transform.position;
                 if (tr.Unit != u)
                 {
-                    tr.Unit = u; tr.Pos = pos; tr.T = now;
+                    tr.Unit = u; tr.Pos = pos; tr.T = now; tr.ChangedAt = now;
                     continue;
                 }
                 float dt = now - tr.T;
-                if (dt > 0.05f && dt <= 1.5f)
+                // a soldier in the air (jump, fall, knockback) or on a ladder keeps momentum that is not its own speed
+                bool airborne = false;
+                Soldier? sol = u as Soldier;
+                if (sol != null) { try { airborne = sol.IsFalling || sol.IsJumping || sol.IsClimbing; } catch { } }
+                if (dt > 0.05f && dt <= 1.5f && !airborne && now - tr.ChangedAt >= Cfg.SpeedSettleSeconds)
                 {
                     float top = u.TopSpeed;
                     if (top > 0.5f)
@@ -448,6 +459,19 @@ namespace Si_AntiCheat
                         Cfg = AntiCheatConfig.Load();
                         Reply(caller, "config reloaded, cap mode " + Cfg.CapMode);
                         return;
+                    case "profile":
+                    {
+                        Player? t = FindPlayer(string.Join(" ", tok.Skip(1)), out string w);
+                        if (t == null) { Reply(caller, w + ". Usage: !audit profile <player>"); return; }
+                        Unit? u = t.ControlledUnit;
+                        if (u == null) { Reply(caller, t.PlayerName + " controls no unit"); return; }
+                        UnitProfile? p = Profiles.For(u);
+                        float vm = u.DamageManager != null ? Profiles.VictimMultiplier(u.DamageManager) : 1f;
+                        Reply(caller, t.PlayerName + ": " + (p != null ? p.ToString() : "no profile") + " | top speed " + u.TopSpeed.ToString("0.0", CultureInfo.InvariantCulture) +
+                                      " m/s | as victim weak-spot x" + vm.ToString("0.00", CultureInfo.InvariantCulture) + " | cap x" + Cfg.CapTolerance.ToString("0.00", CultureInfo.InvariantCulture));
+                        if (p != null) foreach (string line in p.Detail.Take(6)) Reply(caller, "  " + line);
+                        return;
+                    }
                     case "minutes":
                     {
                         if (tok.Count < 2 || !int.TryParse(tok[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)) { Reply(caller, "default minutes " + Cfg.DefaultAuditMinutes + " (max " + Cfg.MaxAuditMinutes + ")"); return; }
@@ -497,7 +521,7 @@ namespace Si_AntiCheat
 
         static void Help(Player? caller)
         {
-            Reply(caller, "!audit <player> [minutes] | compare <player> [minutes] | stop <player>|all | report [player|all] | status | minutes <n> | cap [off|log|clamp] | always [on|off] | reload");
+            Reply(caller, "!audit <player> [minutes] | compare <player> [minutes] | stop <player>|all | report [player|all] | status | profile <player> | minutes <n> | cap [off|log|clamp] | always [on|off] | reload");
         }
 
         static void Status(Player? caller)

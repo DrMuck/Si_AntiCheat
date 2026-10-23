@@ -38,6 +38,7 @@ namespace Si_AntiCheat
         public float RateFlag = 1.5f;           // hits in the last second / max shots per second of the unit
         public float SpeedFlag = 1.15f;         // horizontal speed / TopSpeed of the unit
         public float SpeedSampleInterval = 0.25f;
+        public float SpeedSettleSeconds = 3f;   // no speed samples this long after the player's unit changed (bailing out of a vehicle keeps its momentum)
 
         // ---- audit sessions ----
         public int DefaultAuditMinutes = 10;
@@ -102,6 +103,8 @@ namespace Si_AntiCheat
             if (SpeedFlag < 1f) SpeedFlag = 1f;
             if (SpeedSampleInterval < 0.1f) SpeedSampleInterval = 0.1f;
             if (SpeedSampleInterval > 2f) SpeedSampleInterval = 2f;
+            if (SpeedSettleSeconds < 0f) SpeedSettleSeconds = 0f;
+            if (SpeedSettleSeconds > 30f) SpeedSettleSeconds = 30f;
             if (DefaultAuditMinutes < 1) DefaultAuditMinutes = 1;
             if (MaxAuditMinutes < DefaultAuditMinutes) MaxAuditMinutes = DefaultAuditMinutes;
             if (MaxParallelAudits < 1) MaxParallelAudits = 1;

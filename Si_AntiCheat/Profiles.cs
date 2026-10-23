@@ -20,6 +20,7 @@ namespace Si_AntiCheat
         public float MaxRadius;     // metres: largest splash radius or melee reach
         public float ShotsPerSec;   // sum over weapons of shots per second (upper bound for hits per second)
         public int Entries;
+        public readonly List<string> Detail = new List<string>();   // one line per weapon entry, for !audit profile
 
         public override string ToString() =>
             Name + " hit<=" + MaxHit.ToString("0") + (MaxRepair > 0 ? " repair<=" + MaxRepair.ToString("0") : "") +
@@ -107,6 +108,10 @@ namespace Si_AntiCheat
                 p.ShotsPerSec += rate;
             }
             p.Entries++;
+            if (p.Detail.Count < 12)
+                p.Detail.Add((d.name ?? "projectile") + ": impact " + direct.ToString("0") + (d.m_bPenetrating ? " pen " + d.m_fPenetratingDamage.ToString("0") : "") +
+                             (d.m_bSplash ? " splash " + d.m_fSplashDamageMax.ToString("0") + "/" + d.m_fSplashDamageRadiusMax.ToString("0") + "m" : "") +
+                             " range " + range.ToString("0") + "m x" + perShot + "/" + interval.ToString("0.00") + "s");
         }
 
         static void AddCreatureAttack(UnitProfile p, CreatureAttack a)
@@ -120,6 +125,7 @@ namespace Si_AntiCheat
             if (a.Radius > p.MaxRadius) p.MaxRadius = a.Radius;
             p.ShotsPerSec += a.Time > 0f ? 1f / a.Time : 1f;
             p.Entries++;
+            if (p.Detail.Count < 12) p.Detail.Add("melee " + a.Type + ": " + a.Damage.ToString("0") + " reach " + a.Radius.ToString("0.0") + "m /" + a.Time.ToString("0.00") + "s");
         }
 
         static void Consider(UnitProfile p, float dmg)
