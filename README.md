@@ -63,12 +63,27 @@ damage to the victim's health before this mod sees it, so a 9999 claim on a 1000
 | Command | Effect |
 |---|---|
 | `!audit <player> [minutes]` | Start an audit (name, part of a name, or Steam id; default `DefaultAuditMinutes`, max `MaxAuditMinutes`). Silent for everyone but admins. |
+| `!audit compare <player> [minutes]` | Audit a player you trust in parallel as a **reference**: their numbers become an extra column in every report (same window, same lag). No verdict for references. Runs at least as long as the longest suspect. |
+| `!audit minutes <n>` | Default audit length (saved). |
 | `!audit stop <player>\|all` | End now, write the report, summary to admins. |
 | `!audit report [player\|all]` | Write an interim report, keep auditing. |
 | `!audit status` | Running audits with live counters, baseline size, cap mode. |
 | `!audit cap [off\|log\|clamp]` | Show or set what happens to hits above the cap (saved to the config). |
 | `!audit always [on\|off]` | Show or set whether cap and sender check run without an audit (saved). Default off. |
 | `!audit reload` | Re-read the config. |
+
+## Si_ModUI panel (optional, Si_ModUI server + client)
+
+`ModUI.cs` exports the commands with pickers: **Audit a player** (player picker, then minutes or DEFAULT), **Add
+reference player**, **Default minutes** (value field), **Refresh tables**, **Report now** and **Stop + report** (choice
+picker listing the running audits), the **Hits above the cap** switch (OFF / LOG / CLAMP), **Checks without an audit**
+(ON / OFF) and **Reload config**. Status lines show whether the mod is armed and one live line per running audit.
+
+Reports are shown as tables on the mod page, **for admins only** (per-player data, checked against the Admin Mod):
+a "Running audits" grid, a live report grid per suspect and the last three finished reports. Each report grid has one
+column for the suspect, one for the population and one per reference player, rows = the four ratio metrics as
+`p50 / p95 / max (flagged %, n)`, counts, and the verdict reasons. The ModUI server refreshes per-player tables at most
+once a minute or right after one of your commands, so **Refresh tables** (= `!audit status`) updates them on demand.
 
 ## Config
 
@@ -106,7 +121,9 @@ which is fine because the cap is an upper bound.
 
 ## Status
 
-0.1.1 (2026-10-23): built for both branches, reference check OK against the live server and 0.9.47, **not yet run in
-a live round**. 0.1.1 made the mod idle unless an audit runs (`AlwaysOn` switch). First thing to check in the log after a round: `[AC]` lines with "no weapon profile" (units whose
+0.2.0 (2026-10-23): built for both branches, reference check OK against the live server and 0.9.47. 0.1.1 ran on the
+server (command registered, audit started from the ModUI admin tab); 0.1.1 made the mod idle unless an audit runs
+(`AlwaysOn` switch), 0.2.0 added the ModUI panel with report tables, reference players and `!audit minutes`. The
+report tables and the reference columns have not been seen in game yet. First thing to check in the log after a round: `[AC]` lines with "no weapon profile" (units whose
 weapons the profile walk misses) and over-cap lines for players who are obviously not cheating (then raise
 `CapTolerance` or fix the profile) before switching `CapMode` to `clamp`.
