@@ -82,6 +82,10 @@ namespace ModUI
         // ---- plain button: sends `text` (plus the Arguments field, if the player typed one) ----
         public ModUIExport Action(string text, string label, string description, bool admin = false)
             => Add(text, label, description, admin, null, null, null);
+        // ---- read-only report (status, help, top list): an Action flagged "i", so the chat directory (/mods) and clients
+        //      list it under "info" instead of "do and adjust". Without the flag the server guesses from text and label. ----
+        public ModUIExport Report(string text, string label, string description, bool admin = false)
+            => Add(text, label, description, admin, null, null, null, info: true);
 
         // ---- button that opens pickers: arg = chain of stages "player", "team", "map", "ban", "choice" (comma separated);
         //      a "choice" stage takes its options from `choices`. The chosen tokens are appended to `text`. ----
@@ -157,12 +161,13 @@ namespace ModUI
             return root.Count == 0 ? null : JsonConvert.SerializeObject(root, Formatting.None);
         }
 
-        private ModUIExport Add(string text, string label, string description, bool admin, string arg, string value, JArray choices, bool multi = false)
+        private ModUIExport Add(string text, string label, string description, bool admin, string arg, string value, JArray choices, bool multi = false, bool info = false)
         {
             var o = new JObject { ["t"] = text, ["l"] = label ?? text, ["d"] = description ?? "", ["a"] = admin };
             if (!string.IsNullOrEmpty(arg)) o["arg"] = arg;
             if (value != null) o["v"] = value;
             if (multi) o["m"] = true;
+            if (info) o["i"] = true;
             if (choices != null && choices.Count > 0) o["ch"] = choices;
             commands.Add(o);
             return this;

@@ -73,8 +73,8 @@ damage to the victim's health before this mod sees it, so a 9999 claim on a 1000
 
 | Command | Effect |
 |---|---|
-| `!audit <player> [minutes]` | Start an audit (name, part of a name, or Steam id; default `DefaultAuditMinutes`, max `MaxAuditMinutes`). Silent for everyone but admins. |
-| `!audit compare <player> [minutes]` | Audit a player you trust in parallel as a **reference**: their numbers become an extra column in every report (same window, same lag). No verdict for references. Runs at least as long as the longest suspect. |
+| `!audit <player> [reference ...] [minutes]` | Start an audit (name, part of a name, or Steam id; default `DefaultAuditMinutes`, max `MaxAuditMinutes`). Further names in the same command start as references with the same duration. Silent for everyone but admins. |
+| `!audit compare <player> [player ...] [minutes]` | Audit one or more players you trust in parallel as **references**: their numbers become an extra column in every report (same window, same lag). No verdict for references. Runs at least as long as the longest suspect. |
 | `!audit minutes <n>` | Default audit length (saved). |
 | `!audit stop <player>\|all` | End now, write the report, summary to admins. |
 | `!audit report [player\|all]` | Write an interim report, keep auditing. |

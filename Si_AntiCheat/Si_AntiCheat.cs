@@ -12,7 +12,8 @@
  prefix does nothing. AlwaysOn in the config (or "!audit always on") keeps the cap and sender check running permanently.
 
    !audit <player> [minutes]   start an audit (default minutes from config)
-   !audit compare <player> [m] audit a trusted player in parallel: own column in every report (cross-check)
+   !audit compare <player> [player ...] [m] audit trusted players in parallel: own column each in every report (cross-check)
+   !audit <suspect> <ref> [ref ...] [m] suspect plus references in one command, one duration for all
    !audit minutes <n>          default audit length (saved)
    !audit stop <player>|all    end now and write the report
    !audit report [player|all]  write a report now, keep auditing
@@ -38,7 +39,7 @@ namespace Si_AntiCheat
 {
     public partial class AntiCheatMod : MelonMod
     {
-        public const string Version = "0.3.0";
+        public const string Version = "0.3.1";
         const string Tag = "<color=#FF9F5A>[AC]</color> ";
         internal static AntiCheatConfig Cfg = new AntiCheatConfig();
 
@@ -74,7 +75,7 @@ namespace Si_AntiCheat
             try
             {
                 HelperMethods.RegisterAdminCommand("audit", Command_Audit, Power.Kick,
-                    "Audit a player for cheating. Usage: !audit <player> [minutes] | !audit compare <player> | !audit stop|report <player>|all | !audit status | !audit minutes <n> | !audit cap [off|log|clamp] | !audit always [on|off]");
+                    "Audit a player for cheating. Usage: !audit <player> [reference ...] [minutes] | !audit compare <player> [player ...] [minutes] | !audit stop|report <player>|all | !audit status | !audit minutes <n> | !audit cap [off|log|clamp] | !audit always [on|off]");
                 Event_Damage.OnPrePlayerDamageReceived += OnPreDamage;
                 if (Cfg.SenderCheck) SenderPatch.Apply(HarmonyInstance);
                 MagazineCheck.Apply(HarmonyInstance);
@@ -509,19 +510,29 @@ namespace Si_AntiCheat
                     minutes = Math.Max(1, Math.Min(Cfg.MaxAuditMinutes, m));
                     tok.RemoveAt(tok.Count - 1);
                 }
-                string query = string.Join(" ", tok);
-                Player? target = FindPlayer(query, out string why);
-                if (target == null) { Reply(caller, why + ". Usage: !audit <player> [minutes] | !audit compare <player> [minutes]"); return; }
-                ulong sid = target.PlayerID.m_ID;
-                if (Audit.Sessions.TryGetValue(sid, out AuditSession running))
+                // One player ("!audit Name 10") or several in one go ("!audit suspect ref1 ref2 10" = the first is the
+                // suspect, the rest references; "!audit compare ref1 ref2 10" = all references), one duration for all.
+                // The whole text is tried as one name first, then every token on its own.
+                List<Player> targets = ResolvePlayers(tok, out string why);
+                if (targets.Count == 0) { Reply(caller, why + ". Usage: !audit <player> [reference ...] [minutes] | !audit compare <player> [player ...] [minutes]"); return; }
+                var started = new List<string>();
+                for (int i = 0; i < targets.Count; i++)
                 {
-                    Reply(caller, target.PlayerName + " is already audited as " + running.Role + ", " + running.MinutesLeft.ToString("0.0", CultureInfo.InvariantCulture) + " min left (" + running.S.Hits + " hits). !audit stop / report " + target.PlayerName);
-                    return;
+                    Player target = targets[i];
+                    bool asReference = reference || i > 0;
+                    ulong sid = target.PlayerID.m_ID;
+                    if (Audit.Sessions.TryGetValue(sid, out AuditSession running))
+                    {
+                        Reply(caller, target.PlayerName + " is already audited as " + running.Role + ", " + running.MinutesLeft.ToString("0.0", CultureInfo.InvariantCulture) + " min left (" + running.S.Hits + " hits). !audit stop / report " + target.PlayerName);
+                        continue;
+                    }
+                    if (Audit.Sessions.Count >= Cfg.MaxParallelAudits) { Reply(caller, "already " + Audit.Sessions.Count + " audits running (MaxParallelAudits); " + target.PlayerName + " not started"); continue; }
+                    AuditSession s = Audit.Start(sid, target.PlayerName, minutes, caller, asReference);
+                    MelonLogger.Msg("[AC] " + s.Role + " audit started on " + target.PlayerName + " (" + sid + ") for " + minutes + " min by " + s.StartedByName);
+                    started.Add(target.PlayerName + (targets.Count > 1 ? " (" + s.Role + ")" : ""));
                 }
-                if (Audit.Sessions.Count >= Cfg.MaxParallelAudits) { Reply(caller, "already " + Audit.Sessions.Count + " audits running (MaxParallelAudits)"); return; }
-                AuditSession s = Audit.Start(sid, target.PlayerName, minutes, caller, reference);
-                MelonLogger.Msg("[AC] " + s.Role + " audit started on " + target.PlayerName + " (" + sid + ") for " + minutes + " min by " + s.StartedByName);
-                Reply(caller, (reference ? "reference " : "auditing ") + target.PlayerName + " for " + minutes + " min (cap mode " + Cfg.CapMode + ", baseline " + (Cfg.PopulationBaseline ? "on" : "off") +
+                if (started.Count == 0) return;
+                Reply(caller, (reference ? "reference " : "auditing ") + string.Join(", ", started) + " for " + minutes + " min (cap mode " + Cfg.CapMode + ", baseline " + (Cfg.PopulationBaseline ? "on" : "off") +
                               (reference ? "). Their numbers become a column in every report." : "). Report to admins + file when done."));
             }
             catch (Exception ex)
@@ -533,7 +544,28 @@ namespace Si_AntiCheat
 
         static void Help(Player? caller)
         {
-            Reply(caller, "!audit <player> [minutes] | compare <player> [minutes] | stop <player>|all | report [player|all] | status | profile <player> | minutes <n> | cap [off|log|clamp] | always [on|off] | reload");
+            Reply(caller, "!audit <player> [reference ...] [minutes] | compare <player> [player ...] [minutes] | stop <player>|all | report [player|all] | status | profile <player> | minutes <n> | cap [off|log|clamp] | always [on|off] | reload");
+        }
+
+        // "<name words>" = one player; otherwise every token is one player (a unique part of the name, or a Steam id).
+        static List<Player> ResolvePlayers(List<string> tok, out string why)
+        {
+            var result = new List<Player>();
+            why = "no player given";
+            if (tok.Count == 0) return result;
+            Player? whole = FindPlayer(string.Join(" ", tok), out why);
+            if (whole != null) { result.Add(whole); return result; }
+            if (tok.Count == 1) return result;
+            string wholeWhy = why;
+            var seen = new HashSet<ulong>();
+            foreach (string t in tok)
+            {
+                Player? p = FindPlayer(t, out string w);
+                if (p == null) { result.Clear(); why = w + " (as one name: " + wholeWhy + ")"; return result; }
+                if (seen.Add(p.PlayerID.m_ID)) result.Add(p);
+            }
+            why = "";
+            return result;
         }
 
         static void Status(Player? caller)
